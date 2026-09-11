@@ -60,6 +60,8 @@ class EstadoRobot:
     yaw: float
     accion: str
     bateria: int = 87
+    emote: str | None = None
+    progreso_emote: float = 0.0
 
     def __str__(self) -> str:
         return (f"x={self.x:+.2f} m  y={self.y:+.2f} m  "
@@ -259,7 +261,8 @@ class Robot:
                 return EstadoRobot(
                     x=d.get("x", 0.0), y=d.get("y", 0.0), z=d.get("z", 0.0),
                     yaw=d.get("yaw", 0.0), accion=d.get("accion", "quieto"),
-                    bateria=d.get("bateria", 87))
+                    bateria=d.get("bateria", 87), emote=d.get("emote"),
+                    progreso_emote=float(d.get("progreso_emote", 0.0)))
             except Exception:                                 # noqa: BLE001
                 pass   # si el socket fallo, probamos con el archivo
 
@@ -276,7 +279,8 @@ class Robot:
             x=datos.get("x", 0.0), y=datos.get("y", 0.0),
             z=datos.get("z", 0.0), yaw=datos.get("yaw", 0.0),
             accion=datos.get("accion", "quieto"),
-            bateria=datos.get("bateria", 87))
+            bateria=datos.get("bateria", 87), emote=datos.get("emote"),
+            progreso_emote=float(datos.get("progreso_emote", 0.0)))
 
     # ---------- movimiento ----------
     def _sostener(self, vx: float, vy: float, vyaw: float, tiempo: float) -> None:
@@ -363,6 +367,25 @@ class Robot:
         time.sleep(2.0)
         return self.verificar_estado()
 
+    # ---------- extension exclusiva del simulador local ----------
+    def ejecutar_emote_simulado(self, nombre: str) -> EstadoRobot:
+        """Inicia un emote visual sin exponer joints ni tocar el SDK real."""
+        self._exigir_simulador_local()
+        ejecutar = getattr(self._cliente, "EjecutarEmoteSimulado", None)
+        if not callable(ejecutar):
+            raise ErrorDeSeguridad("el transporte no admite emotes simulados")
+        ejecutar(str(nombre).strip().upper())
+        return self.verificar_estado()
+
+    def cancelar_emote_simulado(self) -> EstadoRobot:
+        """Cancela la animacion visual; siempre permanece dentro del socket."""
+        self._exigir_simulador_local()
+        cancelar = getattr(self._cliente, "CancelarEmoteSimulado", None)
+        if not callable(cancelar):
+            raise ErrorDeSeguridad("el transporte no admite emotes simulados")
+        cancelar()
+        return self.verificar_estado()
+
     # ---------- alias tolerantes a errores de tipeo ----------
     def movmineto(self, *a, **k):
         return self.avanzar(*a, **k)
@@ -377,3 +400,15 @@ class Robot:
         if self._cliente is None:
             raise NoHaySimulador(
                 "El robot no esta conectado. Llama a robot.conectar() primero.")
+
+    def _exigir_simulador_local(self) -> None:
+        # Esta barrera se evalua ANTES de buscar un metodo en el cliente DDS.
+        # Por lo tanto una llamada accidental contra hardware real no puede
+        # convertirse en una orden de brazos ni en una API Unitree inventada.
+        if self.destino != "simulador" or self.transporte != "local":
+            raise ErrorDeSeguridad(
+                "los emotes articulados estan habilitados solo en el simulador local"
+            )
+        if self.modelo != "g1":
+            raise ErrorDeSeguridad("los emotes articulados requieren el modelo G1")
+        self._exigir_conexion()

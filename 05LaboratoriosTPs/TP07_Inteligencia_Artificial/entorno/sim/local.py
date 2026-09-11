@@ -165,6 +165,24 @@ class ServidorLocal(socketserver.ThreadingTCPServer):
         self.mundo.gesto(nombre, float(pedido.get("duracion", 2.0)))
         return {"ok": True}
 
+    def _orden_emote_simulado(self, pedido: dict) -> dict:
+        """Extension local: no existe ni se reenvia por DDS al robot real."""
+        if self.robot.clave != "g1":
+            return {"ok": False, "error": "los emotes visuales requieren el G1"}
+        from .emotes_g1 import duracion_emote
+
+        nombre = str(pedido.get("nombre", "")).strip().upper()
+        try:
+            duracion = duracion_emote(nombre)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        self.mundo.iniciar_emote(nombre, duracion)
+        return {"ok": True, "duracion": duracion}
+
+    def _orden_cancelar_emote_simulado(self, _pedido: dict) -> dict:
+        self.mundo.cancelar_emote()
+        return {"ok": True}
+
     def _orden_estado(self, _pedido: dict) -> dict:
         return {"ok": True, "estado": self.mundo.leer()}
 
@@ -263,6 +281,23 @@ class ClienteLocal:
     def ShakeHand(self) -> int:
         return self._codigo(self._pedir({"orden": "gesto",
                                          "nombre": "dar_la_mano"}))
+
+    # Extension DEL SIMULADOR. Los nombres deliberadamente no imitan ningun
+    # metodo del SDK de Unitree, para que este camino no pueda confundirse con
+    # una capacidad del robot fisico.
+    def EjecutarEmoteSimulado(self, nombre: str) -> float:
+        respuesta = self._pedir(
+            {"orden": "emote_simulado", "nombre": str(nombre)}
+        )
+        if not respuesta.get("ok"):
+            raise ErrorTransporte(respuesta.get("error", "emote rechazado"))
+        return float(respuesta.get("duracion", 0.0))
+
+    def CancelarEmoteSimulado(self) -> int:
+        respuesta = self._pedir({"orden": "cancelar_emote_simulado"})
+        if not respuesta.get("ok"):
+            raise ErrorTransporte(respuesta.get("error", "cancelacion rechazada"))
+        return 0
 
     def Estado(self) -> dict:
         return self._pedir({"orden": "estado"}).get("estado", {})

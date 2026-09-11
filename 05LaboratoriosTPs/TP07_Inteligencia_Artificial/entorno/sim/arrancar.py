@@ -113,6 +113,12 @@ class SimuladorOficial:
 
         self.telemetria = Telemetria(self.model.nu)
         self._qpos_previo = None
+        self.animador_emotes = None
+        self._ultimo_error_emote = None
+        if self.robot.clave == "g1":
+            from .emotes_g1 import AnimadorEmotesG1
+
+            self.animador_emotes = AnimadorEmotesG1(self.model, self.mj)
 
     # ---------- transporte ----------
     def iniciar_transporte(self):
@@ -290,7 +296,9 @@ class SimuladorOficial:
             for idx, valor in self.robot.pose_sentado.items():
                 if idx < len(art):
                     art[idx] = valor
-        elif e["accion"] in ("saludando", "besando"):
+        elif e.get("emote") is not None:
+            self._aplicar_emote_seguro(e)
+        elif e["accion"] in ("saludo", "saludando", "dar_la_mano", "besando"):
             for idx, valor in self.robot.saludo.items():
                 if idx < len(art):
                     art[idx] = valor
@@ -318,6 +326,40 @@ class SimuladorOficial:
 
         self.mj.mj_forward(self.model, self.data)
         self._completar_telemetria(e)
+
+    def _aplicar_emote_seguro(self, estado) -> None:
+        """Aplica solo torso/brazos y restaura el frame neutral si falla."""
+        if self.animador_emotes is None:
+            self.mundo.cancelar_emote()
+            return
+        q = self.data.qpos
+        direcciones = self.animador_emotes.direcciones_qpos
+        neutral = {direccion: float(q[direccion]) for direccion in direcciones.values()}
+        error = None
+        aplicado = False
+        try:
+            self.animador_emotes.aplicar(
+                q,
+                estado["emote"],
+                float(estado.get("progreso_emote", 0.0)),
+            )
+            aplicado = True
+            self._ultimo_error_emote = None
+        except Exception as exc:                              # noqa: BLE001
+            error = exc
+        finally:
+            # Este finally es la red de recuperacion: como el bucle es
+            # asincronico, neutralizar aca evita dejar una pose parcial si una
+            # curva o un modelo incompatibles producen una excepcion.
+            if not aplicado:
+                for direccion, valor in neutral.items():
+                    q[direccion] = valor
+                self.mundo.cancelar_emote()
+        if error is not None:
+            mensaje = f"emote cancelado y neutralizado: {type(error).__name__}: {error}"
+            if mensaje != self._ultimo_error_emote:
+                self.mundo.avisos.append(mensaje)
+                self._ultimo_error_emote = mensaje
 
     # ---------- bucles ----------
     def correr_con_ventana(self):

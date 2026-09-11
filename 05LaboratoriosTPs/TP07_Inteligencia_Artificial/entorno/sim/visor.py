@@ -39,6 +39,11 @@ class Visor:
         # Sin gravedad: el modelo no tiene que caerse mientras lo posicionamos.
         self.model.opt.gravity[:] = 0.0
         self._primera_art = 7   # qpos[0:3] posicion, qpos[3:7] cuaternion
+        self.animador_emotes = None
+        if self.robot.clave == "g1":
+            from .emotes_g1 import AnimadorEmotesG1
+
+            self.animador_emotes = AnimadorEmotesG1(self.model, self.mj)
 
     def _pose(self) -> None:
         e = self.mundo.leer()
@@ -56,11 +61,14 @@ class Visor:
             if idx < len(art):
                 art[idx] = valor
 
-        if e["accion"] in ("saludando", "besando"):
+        if e.get("emote") is not None:
+            self._aplicar_emote_seguro(e)
+        elif e["accion"] in ("saludo", "saludando", "dar_la_mano", "besando"):
             for idx, valor in self.robot.saludo.items():
                 if idx < len(art):
                     art[idx] = valor + (
-                        0.35 * math.sin(time.time() * 7.0) if e["accion"] == "saludando" else 0.0
+                        0.35 * math.sin(time.time() * 7.0)
+                        if e["accion"] in ("saludo", "saludando") else 0.0
                     )
         elif e["moviendose"]:
             f = e["fase"]
@@ -69,6 +77,31 @@ class Visor:
                     art[idx] += amplitud * math.sin(f + desfase)
 
         self.mj.mj_forward(self.model, self.data)
+
+    def _aplicar_emote_seguro(self, estado) -> None:
+        if self.animador_emotes is None:
+            self.mundo.cancelar_emote()
+            return
+        q = self.data.qpos
+        direcciones = self.animador_emotes.direcciones_qpos
+        neutral = {direccion: float(q[direccion]) for direccion in direcciones.values()}
+        aplicado = False
+        try:
+            self.animador_emotes.aplicar(
+                q,
+                estado["emote"],
+                float(estado.get("progreso_emote", 0.0)),
+            )
+            aplicado = True
+        except Exception as exc:                              # noqa: BLE001
+            self.mundo.avisos.append(
+                f"emote cancelado y neutralizado: {type(exc).__name__}: {exc}"
+            )
+        finally:
+            if not aplicado:
+                for direccion, valor in neutral.items():
+                    q[direccion] = valor
+                self.mundo.cancelar_emote()
 
     def correr(self, hz: float = 50.0) -> None:
         import mujoco.viewer

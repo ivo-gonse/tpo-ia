@@ -1,0 +1,23 @@
+# Entornos y caches de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Modelos STT/TTS: se descargan fuera del repositorio
+modelos/
+models/
+*.bin
+*.gguf
+*.onnx
+
+# Capturas temporales de audio y diagnosticos locales
+grabaciones/
+recordings/
+*.wav
+*.flac
+*.raw
+*.pcm
+.tp07-local.json
+

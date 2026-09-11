@@ -17,25 +17,48 @@
 1. Abrí `INICIAR_SIMULADOR` y elegí el robot.
 2. Doble clic en `EJECUTAR_MI_CODIGO`, o `python3 mi_desarrollo/mi_tp07.py`.
 
-**Sin robot** (para trabajar el clasificador tranquilo):
+**Sin robot** (mismo modo interactivo, sin conexión física):
 
 ```
 python3 mi_desarrollo/mi_tp07.py --sin-robot
 ```
 
-Corre los 25 casos y te da la accuracy, sin abrir nada.
+La evaluación no se ejecuta al arrancar. Para correr explícitamente los 25
+casos, usá:
 
-## Modo interactivo
+```
+python3 mi_desarrollo/mi_tp07.py --evaluar
+```
 
-Con el robot conectado, después de la evaluación podés escribirle órdenes:
+## Probar los emotes físicos en MuJoCo
+
+1. Abrí `INICIAR_SIMULADOR`, elegí `G1` y dejá visible la ventana 3D.
+2. En otra terminal entrá en `mi_desarrollo`.
+3. Ejecutá:
+
+```powershell
+py -3 probar_emotes.py
+```
+
+El menú permite probar cada emote por separado o los seis en secuencia, sin
+contar chistes. `FINGER GUNS` también dice “bang bang” con TTS local y cae a
+salida de consola si Windows no ofrece una voz compatible.
+
+## Programa interactivo único
+
+Con el robot conectado queda quieto y espera órdenes desde el primer prompt:
 
 ```
   > avanzá 2 metros
   > girá 90 grados a la derecha
-  > salta desde la mesa
+  > baile
+  > emote 4
+  > contame un chiste y bailá
+  > ayuda
 ```
 
-Es la mejor forma de encontrar los casos que tu agente no cubre.
+`--voz` cambia sólo la entrada: texto y voz pasan por el mismo
+`AgenteRobot.procesar(texto)`.
 
 ## Extensión: entrenar un modelo (nivel 2)
 

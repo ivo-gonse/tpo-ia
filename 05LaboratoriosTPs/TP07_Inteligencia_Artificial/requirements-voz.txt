@@ -1,0 +1,11 @@
+# Dependencias opcionales del ingreso por voz. El agente de texto no las necesita.
+# Los modelos se descargan por separado y se guardan fuera del repositorio.
+faster-whisper==1.2.1
+sounddevice==0.5.6
+
+# Fallback TTS local. En Windows usa las voces SAPI instaladas.
+pyttsx3==2.99
+
+# Backend STT liviano opcional (instalar solo si se selecciona en configuracion).
+# vosk==0.3.45
+

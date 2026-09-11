@@ -1,0 +1,12 @@
+avanza medio metro
+retrocede un poco
+gira noventa grados a la derecha
+detenete ya
+saluda a los estudiantes
+decime el estado de bateria
+repeti la ultima accion
+reverti el ultimo movimiento
+activa modo lento
+modo normal
+contame un chiste
+

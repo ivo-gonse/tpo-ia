@@ -53,6 +53,9 @@ class Mundo:
             self.accion = "quieto"
             self._vence_en = 0.0
             self._gesto_hasta = 0.0
+            self.emote = None
+            self._emote_transcurrido = 0.0
+            self._emote_duracion = 0.0
             self._ultimo_avance = time.monotonic()
             self.de_pie = True
             self.altura = 0.0        # offset sobre la altura normal, en metros
@@ -71,6 +74,7 @@ class Mundo:
         tiempo = validar_duracion(tiempo, self.perfil)
 
         with self._lock:
+            self._cancelar_emote_sin_lock()
             self.vx, self.vy, self.vyaw = vx, vy, vyaw
             self._vence_en = tiempo
             if abs(vyaw) > abs(vx) + abs(vy):
@@ -107,6 +111,7 @@ class Mundo:
             if not self.de_pie:
                 self.avisos.append("el robot no esta de pie: ignoro el movimiento")
                 return
+            self._cancelar_emote_sin_lock()
             self.vx, self.vy, self.vyaw = lim
             self._vence_en = max(0.0, float(duracion))
             if abs(self.vyaw) > abs(self.vx) + abs(self.vy):
@@ -120,6 +125,7 @@ class Mundo:
         """Coloca el robot en una pose concreta. Lo usa el TP03 para arrancar
         en la celda de inicio, mirando en la orientacion del mapa."""
         with self._lock:
+            self._cancelar_emote_sin_lock()
             self.x, self.y, self.yaw = float(x), float(y), float(yaw)
             self.vx = self.vy = self.vyaw = 0.0
             self._vence_en = 0.0
@@ -130,6 +136,7 @@ class Mundo:
         with self._lock:
             self.de_pie = de_pie
             if not de_pie:
+                self._cancelar_emote_sin_lock()
                 self.vx = self.vy = self.vyaw = 0.0
                 self._vence_en = 0.0
                 self.accion = "quieto"
@@ -143,14 +150,49 @@ class Mundo:
         with self._lock:
             self.vx = self.vy = self.vyaw = 0.0
             self._vence_en = 0.0
+            self._cancelar_emote_sin_lock()
             self.accion = "quieto"
 
     def gesto(self, nombre: str, duracion: float = 2.0) -> None:
         with self._lock:
+            self._cancelar_emote_sin_lock()
             self.vx = self.vy = self.vyaw = 0.0
             self._vence_en = 0.0
             self.accion = nombre
             self._gesto_hasta = time.monotonic() + duracion
+
+    def iniciar_emote(self, nombre: str, duracion: float) -> None:
+        """Inicia una animacion semantica exclusiva del simulador.
+
+        El mundo no conoce joints ni qpos. Solo conserva el reloj determinista
+        que el visor usa para interpolar la animacion.
+        """
+        duracion = float(duracion)
+        if not math.isfinite(duracion) or duracion <= 0.0:
+            raise ValueError("la duracion del emote debe ser positiva y finita")
+        with self._lock:
+            if not self.de_pie:
+                raise ErrorDeSeguridad("el robot simulado no esta de pie")
+            self.vx = self.vy = self.vyaw = 0.0
+            self._vence_en = 0.0
+            self._gesto_hasta = 0.0
+            self.emote = str(nombre).strip().upper()
+            self._emote_transcurrido = 0.0
+            self._emote_duracion = duracion
+            self._ultimo_avance = time.monotonic()
+            self.accion = f"emote:{self.emote}"
+
+    def cancelar_emote(self) -> None:
+        """Cancela el emote; el siguiente frame del visor queda neutral."""
+        with self._lock:
+            self._cancelar_emote_sin_lock()
+            if not (self.vx or self.vy or self.vyaw):
+                self.accion = "quieto"
+
+    def _cancelar_emote_sin_lock(self) -> None:
+        self.emote = None
+        self._emote_transcurrido = 0.0
+        self._emote_duracion = 0.0
 
     # ---------- lo llama el bucle del simulador ----------
     # Paso maximo de integracion. Con velocidades de 0.25 m/s, 20 ms son 5 mm:
@@ -180,6 +222,15 @@ class Mundo:
             if self._gesto_hasta and ahora >= self._gesto_hasta:
                 self._gesto_hasta = 0.0
                 self.accion = "quieto"
+
+            if self.emote is not None:
+                self._emote_transcurrido = min(
+                    self._emote_duracion,
+                    self._emote_transcurrido + dt,
+                )
+                if self._emote_transcurrido >= self._emote_duracion:
+                    self._cancelar_emote_sin_lock()
+                    self.accion = "quieto"
 
             restante = dt
             while restante > 1e-9:
@@ -211,6 +262,11 @@ class Mundo:
 
     def leer(self) -> dict:
         with self._lock:
+            progreso_emote = (
+                self._emote_transcurrido / self._emote_duracion
+                if self.emote is not None and self._emote_duracion > 0.0
+                else 0.0
+            )
             return {
                 "x": round(self.x, 4),
                 "y": round(self.y, 4),
@@ -222,4 +278,7 @@ class Mundo:
                 "bateria": BATERIA_SIMULADA,
                 "moviendose": abs(self.vx) + abs(self.vy) + abs(self.vyaw) > 1e-6,
                 "fase": self.fase,
+                "emote": self.emote,
+                "progreso_emote": max(0.0, min(1.0, progreso_emote)),
+                "duracion_emote": self._emote_duracion,
             }
